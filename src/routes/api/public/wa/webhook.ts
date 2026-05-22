@@ -2,6 +2,45 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runAgent, isAgentMaster } from "@/lib/ai-agent.server";
+import { getBase64FromMedia } from "@/lib/evolution.server";
+
+// Transcribe audio via Lovable AI Gateway (Gemini supports audio input).
+async function transcribeAudio(base64: string, mimetype: string): Promise<string | null> {
+  const key = process.env.LOVABLE_API_KEY;
+  if (!key) return null;
+  // Map WhatsApp ogg/opus → "ogg" format expected by gateway.
+  let format = "ogg";
+  if (mimetype.includes("mp3") || mimetype.includes("mpeg")) format = "mp3";
+  else if (mimetype.includes("wav")) format = "wav";
+  else if (mimetype.includes("mp4") || mimetype.includes("m4a")) format = "mp4";
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Transcreva fielmente este áudio em português do Brasil. Responda APENAS com a transcrição, sem comentários." },
+              { type: "input_audio", input_audio: { data: base64, format } },
+            ],
+          },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      console.error("Transcribe failed", res.status, await res.text().catch(() => ""));
+      return null;
+    }
+    const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    return j.choices?.[0]?.message?.content?.trim() || null;
+  } catch (e) {
+    console.error("Transcribe error", e);
+    return null;
+  }
+}
 
 export const Route = createFileRoute("/api/public/wa/webhook")({
   server: {
@@ -40,7 +79,12 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
           } else if (event === "MESSAGES_UPSERT") {
             const data = (body.data || {}) as {
               key?: { remoteJid?: string; fromMe?: boolean; id?: string };
-              message?: { conversation?: string; extendedTextMessage?: { text?: string } };
+              message?: {
+                conversation?: string;
+                extendedTextMessage?: { text?: string };
+                audioMessage?: { mimetype?: string; seconds?: number };
+                imageMessage?: { caption?: string };
+              };
               messageTimestamp?: number;
               pushName?: string;
             };
@@ -50,10 +94,47 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
               return new Response("ignored", { status: 200 });
             }
             const phone = jid.split("@")[0].replace(/\D/g, "");
-            const content =
+            const messageId = data.key?.id || null;
+
+            let messageType: "text" | "audio" | "image" | "other" = "text";
+            let content =
               data.message?.conversation ||
               data.message?.extendedTextMessage?.text ||
-              "(mídia não suportada)";
+              data.message?.imageMessage?.caption ||
+              "";
+
+            // Audio: download + transcribe
+            if (data.message?.audioMessage && messageId) {
+              messageType = "audio";
+              try {
+                const { data: inst } = await supabaseAdmin
+                  .from("wa_instances")
+                  .select("api_token")
+                  .eq("instance_name", instanceName)
+                  .maybeSingle();
+                const media = await getBase64FromMedia(instanceName, messageId, inst?.api_token || undefined);
+                if (media?.base64) {
+                  const transcript = await transcribeAudio(
+                    media.base64,
+                    media.mimetype || data.message.audioMessage.mimetype || "audio/ogg"
+                  );
+                  if (transcript) content = `[áudio] ${transcript}`;
+                  else content = "[áudio recebido — não foi possível transcrever]";
+                } else {
+                  content = "[áudio recebido]";
+                }
+              } catch (e) {
+                console.error("Audio download/transcribe error", e);
+                content = "[áudio recebido — erro ao processar]";
+              }
+            } else if (data.message?.imageMessage) {
+              messageType = "image";
+              if (!content) content = "[imagem recebida]";
+            } else if (!content) {
+              messageType = "other";
+              content = "(mídia não suportada)";
+            }
+
             const ts = data.messageTimestamp
               ? new Date(Number(data.messageTimestamp) * 1000).toISOString()
               : new Date().toISOString();
@@ -87,9 +168,9 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                 lead_id: lead.id,
                 remote_jid: jid,
                 direction: fromMe ? "out" : "in",
-                message_id: data.key?.id || null,
+                message_id: messageId,
                 content,
-                message_type: "text",
+                message_type: messageType,
                 timestamp: ts,
                 raw: body as never,
               });
@@ -104,17 +185,20 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                   .from("leads")
                   .update({ last_interaction_at: ts })
                   .eq("id", lead.id);
-            }
+              }
 
-            // Trigger AI agent if message is from the master phone (Denis) and not fromMe
-            if (!fromMe && (await isAgentMaster(phone))) {
-              try {
-                await runAgent({ instanceName, phone, jid, content });
-              } catch (e) {
-                console.error("Agent error:", e);
+              // Trigger AI agent if message is from the master phone (Denis) and not fromMe.
+              // For all other senders we just record the lead/message (handled above).
+              if (!fromMe && (await isAgentMaster(phone))) {
+                try {
+                  // Strip "[áudio] " prefix when passing to agent so it acts naturally.
+                  const agentContent = content.startsWith("[áudio] ") ? content.slice(8) : content;
+                  await runAgent({ instanceName, phone, jid, content: agentContent });
+                } catch (e) {
+                  console.error("Agent error:", e);
+                }
               }
             }
-          }
           }
         } catch (e) {
           console.error("Webhook error:", e);
