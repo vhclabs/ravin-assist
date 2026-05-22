@@ -289,7 +289,7 @@ async function execTool(name: string, args: Record<string, unknown>): Promise<st
     case "listar_leads": {
       const limit = Math.min(Number(args.limit) || 15, 50);
       let q = supabaseAdmin.from("leads").select("id,name,company,status,phone,last_interaction_at").order("last_interaction_at", { ascending: false, nullsFirst: false }).limit(limit);
-      if (args.status) q = q.eq("status", String(args.status));
+      if (args.status) q = q.eq("status", args.status as never);
       if (args.busca) q = q.or(`name.ilike.%${args.busca}%,company.ilike.%${args.busca}%,phone.ilike.%${args.busca}%`);
       const { data, error } = await q;
       if (error) return `Erro: ${error.message}`;
