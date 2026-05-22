@@ -331,6 +331,9 @@ function WhatsAppTab() {
               <Button size="sm" variant="outline" onClick={() => openQr(i.instance_name)} className="border-accent/30">
                 <QrCode className="h-4 w-4 mr-2" /> QR / Reconectar
               </Button>
+              <Button size="sm" variant="outline" onClick={() => resetHook(i.instance_name)} className="border-accent/30" title="Reapontar webhook para a URL publicada">
+                <RefreshCw className="h-4 w-4 mr-2" /> Webhook
+              </Button>
               <Button size="sm" variant="ghost" onClick={() => remove(i.instance_name)} className="text-muted-foreground hover:text-destructive">
                 <Trash2 className="h-4 w-4" />
               </Button>
