@@ -155,7 +155,7 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                   name: data.pushName || `Lead ${phone.slice(-4)}`,
                   origin: "whatsapp",
                   status: "novo",
-                  unread_count: 1,
+                  unread_count: 0,
                   last_interaction_at: ts,
                 })
                 .select("id,unread_count,name")
