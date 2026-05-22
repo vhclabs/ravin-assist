@@ -33,12 +33,17 @@ async function evo<T = unknown>(path: string, init: RequestInit = {}, token?: st
   return body as T;
 }
 
+// Stable published URL — Evolution must call the published deployment, not preview.
+const STABLE_PUBLISHED_URL = "https://ravin-assist.lovable.app";
+
 export function getWebhookUrl(originUrl?: string) {
-  // Use SITE_URL secret if set, else fallback to origin from request.
-  const base = process.env.SITE_URL || originUrl || "";
+  // Prefer SITE_URL secret → published URL → request origin (last resort, may be preview).
+  const base = process.env.SITE_URL || STABLE_PUBLISHED_URL || originUrl || "";
   const token = process.env.EVOLUTION_WEBHOOK_TOKEN || "ravin";
   return `${base.replace(/\/$/, "")}/api/public/wa/webhook?token=${token}`;
 }
+
+const WEBHOOK_EVENTS = ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"];
 
 export async function createInstance(name: string, webhookUrl: string) {
   // Evolution v2 endpoint
@@ -50,12 +55,44 @@ export async function createInstance(name: string, webhookUrl: string) {
       url: webhookUrl,
       byEvents: false,
       base64: false,
-      events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+      events: WEBHOOK_EVENTS,
     },
   };
   return await evo<{ instance: { instanceName: string }; hash?: { apikey?: string } | string; qrcode?: { base64?: string; code?: string } }>(
     `/instance/create`,
     { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function setWebhook(name: string, webhookUrl: string, token?: string) {
+  // Evolution v2: PUT/POST /webhook/set/{instance}
+  return await evo(
+    `/webhook/set/${encodeURIComponent(name)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          byEvents: false,
+          base64: false,
+          events: WEBHOOK_EVENTS,
+        },
+      }),
+    },
+    token
+  );
+}
+
+export async function getBase64FromMedia(name: string, messageKeyId: string, token?: string) {
+  // Evolution v2: POST /chat/getBase64FromMediaMessage/{instance}
+  return await evo<{ base64?: string; mediaType?: string; mimetype?: string; fileName?: string }>(
+    `/chat/getBase64FromMediaMessage/${encodeURIComponent(name)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ message: { key: { id: messageKeyId } }, convertToMp4: false }),
+    },
+    token
   );
 }
 

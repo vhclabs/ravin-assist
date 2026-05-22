@@ -10,6 +10,7 @@ import {
   logoutInstance,
   instanceState,
   getWebhookUrl,
+  setWebhook,
 } from "./evolution.server";
 import { getRequestHost } from "@tanstack/react-start/server";
 
@@ -287,4 +288,19 @@ export const removeWaInstance = createServerFn({ method: "POST" })
     try { await deleteInstance(data.name, token); } catch { /* ignore */ }
     await supabaseAdmin.from("wa_instances").delete().eq("instance_name", data.name);
     return { ok: true };
+  });
+
+export const resetWaWebhook = createServerFn({ method: "POST" })
+  .middleware([requireRavinAuth])
+  .inputValidator((i) => z.object({ name: z.string().min(2).max(40) }).parse(i))
+  .handler(async ({ data }) => {
+    const { data: inst } = await supabaseAdmin
+      .from("wa_instances")
+      .select("api_token")
+      .eq("instance_name", data.name)
+      .maybeSingle();
+    const token = inst?.api_token || undefined;
+    const webhook = getWebhookUrl(originFromRequest());
+    await setWebhook(data.name, webhook, token);
+    return { ok: true, webhook };
   });

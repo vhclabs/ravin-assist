@@ -28,6 +28,7 @@ import {
   createWaInstance,
   refreshQrCode,
   removeWaInstance,
+  resetWaWebhook,
 } from "@/lib/admin.functions";
 import { toast } from "sonner";
 import { Plus, Trash2, Pencil, RefreshCw, Smartphone, QrCode, Loader2 } from "lucide-react";
@@ -288,6 +289,13 @@ function WhatsAppTab() {
     catch (e) { toast.error((e as Error).message); }
   };
 
+  const resetHook = async (name: string) => {
+    try {
+      const r = await resetWaWebhook({ data: { name } });
+      toast.success(`Webhook atualizado: ${r.webhook}`);
+    } catch (e) { toast.error((e as Error).message); }
+  };
+
   const openQr = (name: string) => setQr({ name, image: null });
 
   return (
@@ -322,6 +330,9 @@ function WhatsAppTab() {
               }>{i.status}</Badge>
               <Button size="sm" variant="outline" onClick={() => openQr(i.instance_name)} className="border-accent/30">
                 <QrCode className="h-4 w-4 mr-2" /> QR / Reconectar
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => resetHook(i.instance_name)} className="border-accent/30" title="Reapontar webhook para a URL publicada">
+                <RefreshCw className="h-4 w-4 mr-2" /> Webhook
               </Button>
               <Button size="sm" variant="ghost" onClick={() => remove(i.instance_name)} className="text-muted-foreground hover:text-destructive">
                 <Trash2 className="h-4 w-4" />
