@@ -17,6 +17,7 @@ import { Route as AppComercialRouteImport } from './routes/_app.comercial'
 import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppPedidoNovoRouteImport } from './routes/_app.pedido.novo'
 import { Route as ApiPublicWaWebhookRouteImport } from './routes/api/public/wa/webhook'
+import { Route as AppComercialLeadIdRouteImport } from './routes/_app.comercial.lead.$id'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -57,23 +58,30 @@ const ApiPublicWaWebhookRoute = ApiPublicWaWebhookRouteImport.update({
   path: '/api/public/wa/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppComercialLeadIdRoute = AppComercialLeadIdRouteImport.update({
+  id: '/lead/$id',
+  path: '/lead/$id',
+  getParentRoute: () => AppComercialRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/admin': typeof AppAdminRoute
-  '/comercial': typeof AppComercialRoute
+  '/comercial': typeof AppComercialRouteWithChildren
   '/dashboard': typeof AppDashboardRoute
   '/pedido/novo': typeof AppPedidoNovoRoute
+  '/comercial/lead/$id': typeof AppComercialLeadIdRoute
   '/api/public/wa/webhook': typeof ApiPublicWaWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/admin': typeof AppAdminRoute
-  '/comercial': typeof AppComercialRoute
+  '/comercial': typeof AppComercialRouteWithChildren
   '/dashboard': typeof AppDashboardRoute
   '/pedido/novo': typeof AppPedidoNovoRoute
+  '/comercial/lead/$id': typeof AppComercialLeadIdRoute
   '/api/public/wa/webhook': typeof ApiPublicWaWebhookRoute
 }
 export interface FileRoutesById {
@@ -82,9 +90,10 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/_app/admin': typeof AppAdminRoute
-  '/_app/comercial': typeof AppComercialRoute
+  '/_app/comercial': typeof AppComercialRouteWithChildren
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/pedido/novo': typeof AppPedidoNovoRoute
+  '/_app/comercial/lead/$id': typeof AppComercialLeadIdRoute
   '/api/public/wa/webhook': typeof ApiPublicWaWebhookRoute
 }
 export interface FileRouteTypes {
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/comercial'
     | '/dashboard'
     | '/pedido/novo'
+    | '/comercial/lead/$id'
     | '/api/public/wa/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/comercial'
     | '/dashboard'
     | '/pedido/novo'
+    | '/comercial/lead/$id'
     | '/api/public/wa/webhook'
   id:
     | '__root__'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '/_app/comercial'
     | '/_app/dashboard'
     | '/_app/pedido/novo'
+    | '/_app/comercial/lead/$id'
     | '/api/public/wa/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -183,19 +195,38 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWaWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/comercial/lead/$id': {
+      id: '/_app/comercial/lead/$id'
+      path: '/lead/$id'
+      fullPath: '/comercial/lead/$id'
+      preLoaderRoute: typeof AppComercialLeadIdRouteImport
+      parentRoute: typeof AppComercialRoute
+    }
   }
 }
 
+interface AppComercialRouteChildren {
+  AppComercialLeadIdRoute: typeof AppComercialLeadIdRoute
+}
+
+const AppComercialRouteChildren: AppComercialRouteChildren = {
+  AppComercialLeadIdRoute: AppComercialLeadIdRoute,
+}
+
+const AppComercialRouteWithChildren = AppComercialRoute._addFileChildren(
+  AppComercialRouteChildren,
+)
+
 interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRoute
-  AppComercialRoute: typeof AppComercialRoute
+  AppComercialRoute: typeof AppComercialRouteWithChildren
   AppDashboardRoute: typeof AppDashboardRoute
   AppPedidoNovoRoute: typeof AppPedidoNovoRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRoute,
-  AppComercialRoute: AppComercialRoute,
+  AppComercialRoute: AppComercialRouteWithChildren,
   AppDashboardRoute: AppDashboardRoute,
   AppPedidoNovoRoute: AppPedidoNovoRoute,
 }
