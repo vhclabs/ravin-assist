@@ -1,6 +1,6 @@
 // AI Agent with tool-calling for WhatsApp commands (server-only).
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { sendText } from "./evolution.server";
+import { sendText, sendAudio } from "./evolution.server";
 
 const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-2.5-flash";
@@ -382,12 +382,53 @@ async function execTool(name: string, args: Record<string, unknown>): Promise<st
   return `Ferramenta ${name} desconhecida.`;
 }
 
+// ---------- TTS via OpenAI ----------
+async function textToSpeech(text: string): Promise<string | null> {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return null;
+  // Strip markdown/emojis que ficam estranhos em áudio
+  const clean = text.replace(/[*_~`#]/g, "").replace(/\n+/g, " ").trim();
+  if (!clean) return null;
+  try {
+    const res = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "tts-1", input: clean, voice: "onyx", response_format: "mp3" }),
+    });
+    if (!res.ok) {
+      console.error("TTS failed", res.status, await res.text().catch(() => ""));
+      return null;
+    }
+    const buf = await res.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  } catch (e) {
+    console.error("TTS error", e);
+    return null;
+  }
+}
+
 // ---------- Main entrypoint ----------
-const SYSTEM_PROMPT = `Você é o assistente Jarvis da RAVIN Wine, falando com o Denis pelo WhatsApp.
-Responda sempre em português do Brasil, curto e direto, com emojis pontuais (🍷 📋 ✅).
-Use as ferramentas disponíveis para ler/escrever no sistema. Antes de qualquer ação destrutiva (excluir, editar dados existentes, ajustar estoque), explique o que vai fazer e peça "confirmar" - só execute na próxima mensagem se ele responder "sim/confirmar/ok".
-Quando criar pedido, faça parse natural: "pedido pro Mercadinho do Zé: 10cx Malbec 2020, 5 Cabernet" → identifique cliente e itens.
-Não invente dados que não estão no sistema.`;
+const SYSTEM_PROMPT = `Você é o Jarvis, assistente pessoal do Denis na RAVIN Wine. Pense em si mesmo como um empregado esperto, ágil e levemente sarcástico que tem enorme respeito pelo chefe — mas não resiste a uma zoação carinhosa quando a situação pede.
+
+Tom e estilo:
+- Responda SEMPRE em português do Brasil, curto e direto (Denis não tem paciência pra textão)
+- Seja levemente sarcástico e bem-humorado. Exemplos de tom:
+  "Mais um pedido? Achei que você ia descansar hoje, Denis... mas tudo bem, vou resolver."
+  "Três tarefas atrasadas. Surpresa de sexta-feira, né?"
+  "Seu estoque de Malbec zerou. Alguém foi generoso demais nas amostras?"
+  "Claro, só um segundo enquanto eu faço o que você claramente não consegue acessar sozinho."
+- Use emojis com moderação: 🍷 📊 ✅ 😏 — nunca exagere
+- Execute primeiro, comente depois quando possível
+- IMPORTANTE: suas respostas serão convertidas em áudio, então escreva naturalmente como se estivesse FALANDO, evite bullet points, asteriscos e markdown. Use vírgulas e frases fluidas.
+
+Regras operacionais:
+- Use as ferramentas disponíveis para ler/escrever no sistema
+- Antes de ações destrutivas (excluir, ajustar estoque, editar dados existentes), avise e peça "confirmar" — só execute se responder "sim", "ok" ou "confirmar"
+- Não invente dados. Se não encontrou, diz que não encontrou (com comentário sarcástico opcional)
+- Para pedidos, parse natural: "10 caixas de Malbec pro Zé" → identifica cliente e itens automaticamente`;
 
 async function checkPending(phone: string, content: string): Promise<string | null> {
   const { data } = await supabaseAdmin.from("agent_pending").select("action,summary").eq("phone", phone).maybeSingle();
@@ -409,7 +450,14 @@ export async function runAgent(opts: { instanceName: string; phone: string; jid:
     .select("api_token")
     .eq("instance_name", instanceName)
     .maybeSingle();
-  const sendReply = (text: string) => sendText(instanceName, phone, text, inst?.api_token || undefined);
+  const sendReply = async (text: string) => {
+    const audioBase64 = await textToSpeech(text);
+    if (audioBase64) {
+      await sendAudio(instanceName, phone, audioBase64, "audio/mpeg", inst?.api_token || undefined);
+    } else {
+      await sendText(instanceName, phone, text, inst?.api_token || undefined);
+    }
+  };
 
   // 1. Pending confirmation?
   const pendingReply = await checkPending(phone, content);

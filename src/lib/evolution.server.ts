@@ -132,3 +132,18 @@ export async function sendText(name: string, number: string, text: string, token
     token
   );
 }
+
+export async function sendAudio(name: string, number: string, audioBase64: string, mimetype = "audio/mpeg", token?: string) {
+  return await evo(
+    `/message/sendWhatsAppAudio/${encodeURIComponent(name)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        number,
+        audio: `data:${mimetype};base64,${audioBase64}`,
+        encoding: true,
+      }),
+    },
+    token
+  );
+}

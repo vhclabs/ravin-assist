@@ -62,6 +62,198 @@ export const deleteProduct = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ========== PRODUCT IMPORT ==========
+
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if ((char === "," || char === ";") && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+type ParsedProduct = {
+  description: string;
+  sku?: string | null;
+  ncm?: string | null;
+  unit?: string;
+  qty_per_box?: number;
+  unit_price?: number;
+  ipi_pct?: number;
+  stock?: number;
+};
+
+function mapHeaderRow(headers: string[], vals: string[]): ParsedProduct | null {
+  const find = (...keys: string[]) => {
+    for (const k of keys) {
+      const idx = headers.findIndex((h) => h.toLowerCase().includes(k.toLowerCase()));
+      if (idx >= 0 && vals[idx]) return vals[idx];
+    }
+    return "";
+  };
+  const description = find("descri", "produto", "product", "name", "nome", "item");
+  if (!description) return null;
+  return {
+    description,
+    sku: find("sku", "cod", "code", "ref") || null,
+    ncm: find("ncm") || null,
+    unit: find("unid", "unit", "un") || "UN",
+    qty_per_box: Number(find("cx", "caixa", "box", "pack").replace(",", ".")) || 1,
+    unit_price: parseFloat(find("prec", "price", "valor", "custo", "preco").replace(",", ".")) || 0,
+    ipi_pct: parseFloat(find("ipi").replace(",", ".")) || 6.5,
+    stock: parseInt(find("stock", "estoque", "qtd", "qty", "quant")) || 0,
+  };
+}
+
+function parseProductsFromCSV(text: string): ParsedProduct[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return [];
+  const headers = parseCSVLine(lines[0]).map((h) => h.replace(/^["']|["']$/g, ""));
+  return lines
+    .slice(1)
+    .map((line) => {
+      const vals = parseCSVLine(line).map((v) => v.replace(/^["']|["']$/g, ""));
+      return mapHeaderRow(headers, vals);
+    })
+    .filter(Boolean) as ParsedProduct[];
+}
+
+async function parseProductsFromExcel(base64: string): Promise<ParsedProduct[]> {
+  try {
+    const ExcelJS = await import("exceljs");
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+    const workbook = new ExcelJS.default.Workbook();
+    await workbook.xlsx.load(bytes.buffer as ArrayBuffer);
+    const sheet = workbook.worksheets[0];
+    if (!sheet) return [];
+    const headers: string[] = [];
+    sheet.getRow(1).eachCell((cell) => headers.push(String(cell.value ?? "")));
+    const rows: ParsedProduct[] = [];
+    sheet.eachRow((row, idx) => {
+      if (idx === 1) return;
+      const vals: string[] = [];
+      row.eachCell({ includeEmpty: true }, (cell) => vals.push(String(cell.value ?? "")));
+      const p = mapHeaderRow(headers, vals);
+      if (p) rows.push(p);
+    });
+    return rows;
+  } catch (e) {
+    console.error("Excel parse error", e);
+    return [];
+  }
+}
+
+async function extractProductsWithAI(base64: string, mimetype: string): Promise<ParsedProduct[]> {
+  const key = process.env.LOVABLE_API_KEY;
+  if (!key) return [];
+  const prompt = `Extraia todos os produtos desta imagem/documento e retorne SOMENTE um array JSON válido, sem explicações. Cada objeto deve ter: description (obrigatório), sku, stock, unit_price, unit, ncm, ipi_pct, qty_per_box. Exemplo: [{"description":"Vinho Malbec 750ml","sku":"MAL001","stock":100,"unit_price":45.90,"unit":"UN"}]`;
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: `data:${mimetype};base64,${base64}` } },
+            ],
+          },
+        ],
+      }),
+    });
+    if (!res.ok) return [];
+    const j = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const text = j.choices?.[0]?.message?.content?.trim() || "";
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return [];
+    return JSON.parse(match[0]) as ParsedProduct[];
+  } catch (e) {
+    console.error("AI product extract error", e);
+    return [];
+  }
+}
+
+export const importProducts = createServerFn({ method: "POST" })
+  .middleware([requireMaster])
+  .inputValidator((i: unknown) =>
+    z
+      .object({
+        filename: z.string(),
+        content: z.string().max(8_000_000), // ~6MB base64
+        mimetype: z.string(),
+      })
+      .parse(i)
+  )
+  .handler(async ({ data }) => {
+    const { filename, content, mimetype } = data;
+    const ext = filename.toLowerCase().split(".").pop() ?? "";
+    const isImage = mimetype.startsWith("image/");
+    const isPdf = ext === "pdf" || mimetype === "application/pdf";
+    const isCsv = ext === "csv" || mimetype === "text/csv" || mimetype === "text/plain";
+    const isExcel = ext === "xlsx" || ext === "xls" || mimetype.includes("spreadsheet") || mimetype.includes("excel");
+
+    let rows: ParsedProduct[] = [];
+    if (isImage || isPdf) {
+      rows = await extractProductsWithAI(content, mimetype);
+    } else if (isCsv) {
+      // content may be raw CSV text or base64 — try decode first, fall back to raw
+      let text = content;
+      try { text = atob(content); } catch { /* raw text */ }
+      rows = parseProductsFromCSV(text);
+    } else if (isExcel) {
+      rows = await parseProductsFromExcel(content);
+    } else {
+      throw new Error("Formato não suportado. Use CSV, Excel (.xlsx), imagem ou PDF.");
+    }
+
+    if (!rows.length) throw new Error("Nenhum produto encontrado no arquivo.");
+
+    let inserted = 0, updated = 0, errors = 0;
+    for (const row of rows) {
+      if (!row.description?.trim()) continue;
+      const payload = {
+        description: row.description.trim(),
+        sku: row.sku || null,
+        ncm: row.ncm || null,
+        unit: row.unit || "UN",
+        qty_per_box: row.qty_per_box || 1,
+        unit_price: row.unit_price || 0,
+        ipi_pct: row.ipi_pct ?? 6.5,
+        stock: row.stock || 0,
+        active: true,
+      };
+      if (payload.sku) {
+        const { data: existing } = await supabaseAdmin.from("products").select("id").eq("sku", payload.sku).maybeSingle();
+        if (existing) {
+          const { error } = await supabaseAdmin.from("products").update(payload).eq("id", existing.id);
+          error ? errors++ : updated++;
+          continue;
+        }
+      }
+      const { error } = await supabaseAdmin.from("products").insert(payload);
+      error ? errors++ : inserted++;
+    }
+
+    return { inserted, updated, errors, total: rows.length };
+  });
+
 // ========== USERS ==========
 const userSchema = z.object({
   id: z.string().uuid().optional(),
