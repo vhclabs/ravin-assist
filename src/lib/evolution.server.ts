@@ -33,12 +33,13 @@ async function evo<T = unknown>(path: string, init: RequestInit = {}, token?: st
   return body as T;
 }
 
-// Stable published URL — Evolution must call the published deployment, not preview.
+// Stable URLs — use dev URL when resetting from Lovable preview, published URL in production.
 const STABLE_PUBLISHED_URL = "https://ravin-assist.lovable.app";
+const STABLE_DEV_URL = "https://project--2e75a4bc-97c7-4f19-bf96-96d6499954a3-dev.lovable.app";
 
 export function getWebhookUrl(originUrl?: string) {
-  // Prefer SITE_URL secret → published URL → request origin (last resort, may be preview).
-  const base = process.env.SITE_URL || STABLE_PUBLISHED_URL || originUrl || "";
+  const isPreviewOrigin = originUrl?.includes("lovableproject.com") || originUrl?.includes("id-preview--");
+  const base = process.env.SITE_URL || (isPreviewOrigin ? STABLE_DEV_URL : STABLE_PUBLISHED_URL) || originUrl || "";
   const token = process.env.EVOLUTION_WEBHOOK_TOKEN || "ravin";
   return `${base.replace(/\/$/, "")}/api/public/wa/webhook?token=${token}`;
 }
