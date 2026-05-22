@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { loginWithPasscode, me } from "./auth.functions";
+import { setRavinPasscode, clearRavinPasscode, getRavinPasscode } from "./ravin-auth-client";
 
-const MASTER_CREDENTIAL = "manu2107@";
-const STORAGE_KEY = "ravin_auth_v1";
+type AppUser = { id: string; name: string; role: "master" | "vendedor" };
 
 type AuthCtx = {
   isAuthed: boolean;
-  login: (code: string) => boolean;
+  user: AppUser | null;
+  login: (code: string) => Promise<boolean>;
   logout: () => void;
   ready: boolean;
 };
@@ -13,31 +15,54 @@ type AuthCtx = {
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthed, setIsAuthed] = useState(false);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsAuthed(localStorage.getItem(STORAGE_KEY) === "ok");
+    const code = getRavinPasscode();
+    if (!code) {
       setReady(true);
+      return;
     }
+    (async () => {
+      try {
+        const u = await me();
+        setUser(u as AppUser);
+      } catch {
+        clearRavinPasscode();
+      } finally {
+        setReady(true);
+      }
+    })();
   }, []);
 
-  const login = (code: string) => {
-    if (code.trim() === MASTER_CREDENTIAL) {
-      localStorage.setItem(STORAGE_KEY, "ok");
-      setIsAuthed(true);
+  const login = async (code: string) => {
+    const trimmed = code.trim();
+    setRavinPasscode(trimmed);
+    try {
+      const r = await loginWithPasscode({ data: { passcode: trimmed } });
+      if (!r.ok) {
+        clearRavinPasscode();
+        return false;
+      }
+      setUser(r.user as AppUser);
       return true;
+    } catch {
+      clearRavinPasscode();
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    setIsAuthed(false);
+    clearRavinPasscode();
+    setUser(null);
   };
 
-  return <Ctx.Provider value={{ isAuthed, login, logout, ready }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ isAuthed: !!user, user, login, logout, ready }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useAuth() {

@@ -30,19 +30,18 @@ function Login() {
     return () => clearTimeout(t);
   }, []);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      if (login(code)) {
-        toast.success("Bem-vindo, Denis.");
-        navigate({ to: "/dashboard", replace: true });
-      } else {
-        toast.error("Credencial inválida.");
-        setCode("");
-        setLoading(false);
-      }
-    }, 400);
+    const ok = await login(code);
+    if (ok) {
+      toast.success("Bem-vindo, Denis.");
+      navigate({ to: "/dashboard", replace: true });
+    } else {
+      toast.error("Credencial inválida.");
+      setCode("");
+      setLoading(false);
+    }
   };
 
   return (
