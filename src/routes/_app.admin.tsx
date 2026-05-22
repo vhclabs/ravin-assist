@@ -15,6 +15,7 @@ import {
   listProducts,
   upsertProduct,
   deleteProduct,
+  importProducts,
   listUsers,
   upsertUser,
   deleteUser,
@@ -32,7 +33,7 @@ import {
   listWebhookLogs,
 } from "@/lib/admin.functions";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil, RefreshCw, Smartphone, QrCode, Loader2, Radio } from "lucide-react";
+import { Plus, Trash2, Pencil, RefreshCw, Smartphone, QrCode, Loader2, Radio, Upload, FileText, ImageIcon, CheckCircle2, AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admin")({
   head: () => ({ meta: [{ title: "RAVIN · Admin" }] }),
@@ -79,6 +80,137 @@ function AdminPage() {
   );
 }
 
+/* ============================== IMPORT DIALOG ============================== */
+function ImportProductsDialog({ open, onOpenChange, onSuccess }: { open: boolean; onOpenChange: (o: boolean) => void; onSuccess: () => void }) {
+  const [dragging, setDragging] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ inserted: number; updated: number; errors: number; total: number } | null>(null);
+
+  const reset = () => { setFile(null); setResult(null); };
+
+  const handleFile = (f: File) => { setFile(f); setResult(null); };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  };
+
+  const processFile = async () => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+      const content = btoa(bin);
+      const res = await importProducts({ data: { filename: file.name, content, mimetype: file.type || "application/octet-stream" } });
+      setResult(res);
+      onSuccess();
+    } catch (e) {
+      toast.error((e as Error).message || "Erro ao importar.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fileIcon = () => {
+    if (!file) return <Upload className="h-10 w-10 text-accent/50" />;
+    const name = file.name.toLowerCase();
+    if (name.match(/\.(jpg|jpeg|png|webp|gif)$/)) return <ImageIcon className="h-10 w-10 text-accent" />;
+    return <FileText className="h-10 w-10 text-accent" />;
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+      <DialogContent className="bg-card border-accent/20 sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Importar Estoque</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Mande qualquer coisa: foto da planilha, CSV, Excel (.xlsx), PDF com tabela — o sistema detecta e importa automaticamente.
+          </p>
+
+          {!result ? (
+            <div
+              className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
+                dragging ? "border-accent bg-accent/10" : "border-accent/30 hover:border-accent/60 hover:bg-accent/5"
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              onClick={() => document.getElementById("import-file-input")?.click()}
+            >
+              <input
+                id="import-file-input"
+                type="file"
+                className="hidden"
+                accept=".csv,.xlsx,.xls,.pdf,image/*"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+              />
+              {fileIcon()}
+              {file ? (
+                <div className="text-center">
+                  <p className="text-sm font-medium">{file.name}</p>
+                  <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-sm font-medium">Arraste o arquivo aqui ou clique para selecionar</p>
+                  <p className="text-xs text-muted-foreground mt-1">CSV · Excel · PDF · Foto (JPG, PNG, WebP)</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-accent/10 bg-card/40 p-6 space-y-3">
+              <div className="flex items-center gap-2">
+                {result.errors === 0 ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-amber-400" />
+                )}
+                <span className="font-medium">Importação concluída</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3">
+                  <p className="text-2xl font-bold text-emerald-400">{result.inserted}</p>
+                  <p className="text-xs text-muted-foreground">Inseridos</p>
+                </div>
+                <div className="rounded-lg bg-accent/10 border border-accent/20 p-3">
+                  <p className="text-2xl font-bold text-accent">{result.updated}</p>
+                  <p className="text-xs text-muted-foreground">Atualizados</p>
+                </div>
+                <div className={`rounded-lg p-3 ${result.errors > 0 ? "bg-destructive/10 border border-destructive/20" : "bg-muted/20 border border-border"}`}>
+                  <p className={`text-2xl font-bold ${result.errors > 0 ? "text-destructive" : "text-muted-foreground"}`}>{result.errors}</p>
+                  <p className="text-xs text-muted-foreground">Erros</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          {result ? (
+            <>
+              <Button variant="ghost" onClick={reset}>Importar outro</Button>
+              <Button onClick={() => { reset(); onOpenChange(false); }} className="bg-gradient-wine border border-accent/40">Fechar</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+              <Button onClick={processFile} disabled={!file || loading} className="bg-gradient-wine border border-accent/40">
+                {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processando…</> : <><Upload className="h-4 w-4 mr-2" /> Importar</>}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ============================== PRODUCTS ============================== */
 type Product = {
   id: string;
@@ -98,6 +230,7 @@ function ProductsTab() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Product> | null>(null);
   const [search, setSearch] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -157,10 +290,15 @@ function ProductsTab() {
           onChange={(e) => setSearch(e.target.value)}
           className="bg-background/40 border-accent/20"
         />
+        <Button variant="outline" onClick={() => setImporting(true)} className="border-accent/30 shrink-0">
+          <Upload className="h-4 w-4 mr-2" /> Importar
+        </Button>
         <Button onClick={() => setEditing({ active: true, ipi_pct: 6.5, qty_per_box: 1, unit: "UN" })} className="bg-gradient-wine border border-accent/40 shrink-0">
           <Plus className="h-4 w-4 mr-2" /> Novo produto
         </Button>
       </div>
+
+      <ImportProductsDialog open={importing} onOpenChange={setImporting} onSuccess={refresh} />
 
       {loading ? (
         <div className="text-center py-10 text-muted-foreground">Carregando…</div>
