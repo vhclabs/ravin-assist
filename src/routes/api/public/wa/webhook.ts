@@ -104,8 +104,17 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                   .from("leads")
                   .update({ last_interaction_at: ts })
                   .eq("id", lead.id);
+            }
+
+            // Trigger AI agent if message is from the master phone (Denis) and not fromMe
+            if (!fromMe && (await isAgentMaster(phone))) {
+              try {
+                await runAgent({ instanceName, phone, jid, content });
+              } catch (e) {
+                console.error("Agent error:", e);
               }
             }
+          }
           }
         } catch (e) {
           console.error("Webhook error:", e);
