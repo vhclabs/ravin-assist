@@ -1,6 +1,7 @@
 // Public webhook for Evolution API events. Protected by ?token query param.
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { runAgent, isAgentMaster } from "@/lib/ai-agent.server";
 
 export const Route = createFileRoute("/api/public/wa/webhook")({
   server: {
