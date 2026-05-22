@@ -28,6 +28,7 @@ import {
   createWaInstance,
   refreshQrCode,
   removeWaInstance,
+  resetWaWebhook,
 } from "@/lib/admin.functions";
 import { toast } from "sonner";
 import { Plus, Trash2, Pencil, RefreshCw, Smartphone, QrCode, Loader2 } from "lucide-react";
