@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppPedidoNovoRouteImport } from './routes/_app.pedido.novo'
+import { Route as ApiPublicWaWebhookRouteImport } from './routes/api/public/wa/webhook'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -39,18 +40,25 @@ const AppPedidoNovoRoute = AppPedidoNovoRouteImport.update({
   path: '/pedido/novo',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicWaWebhookRoute = ApiPublicWaWebhookRouteImport.update({
+  id: '/api/public/wa/webhook',
+  path: '/api/public/wa/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
   '/pedido/novo': typeof AppPedidoNovoRoute
+  '/api/public/wa/webhook': typeof ApiPublicWaWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
   '/pedido/novo': typeof AppPedidoNovoRoute
+  '/api/public/wa/webhook': typeof ApiPublicWaWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,12 +67,18 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/pedido/novo': typeof AppPedidoNovoRoute
+  '/api/public/wa/webhook': typeof ApiPublicWaWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/dashboard' | '/pedido/novo'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/dashboard'
+    | '/pedido/novo'
+    | '/api/public/wa/webhook'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/dashboard' | '/pedido/novo'
+  to: '/' | '/login' | '/dashboard' | '/pedido/novo' | '/api/public/wa/webhook'
   id:
     | '__root__'
     | '/'
@@ -72,12 +86,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/_app/dashboard'
     | '/_app/pedido/novo'
+    | '/api/public/wa/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiPublicWaWebhookRoute: typeof ApiPublicWaWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -117,6 +133,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPedidoNovoRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/wa/webhook': {
+      id: '/api/public/wa/webhook'
+      path: '/api/public/wa/webhook'
+      fullPath: '/api/public/wa/webhook'
+      preLoaderRoute: typeof ApiPublicWaWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -136,7 +159,18 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiPublicWaWebhookRoute: ApiPublicWaWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
