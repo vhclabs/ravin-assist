@@ -254,7 +254,7 @@ async function execTool(name: string, args: Record<string, unknown>): Promise<st
     case "listar_tarefas": {
       const limit = Math.min(Number(args.limit) || 15, 50);
       let q = supabaseAdmin.from("tasks").select("id,title,description,status,due_at").order("due_at", { ascending: true, nullsFirst: false }).limit(limit);
-      q = q.eq("status", String(args.status || "pendente"));
+      q = q.eq("status", (args.status as never) || ("pendente" as never));
       if (args.atrasadas) q = q.lt("due_at", new Date().toISOString());
       const { data, error } = await q;
       if (error) return `Erro: ${error.message}`;
