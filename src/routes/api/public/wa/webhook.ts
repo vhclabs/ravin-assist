@@ -4,6 +4,77 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { runAgent, isAgentMaster } from "@/lib/ai-agent.server";
 import { getBase64FromMedia } from "@/lib/evolution.server";
 
+type WebhookLog = {
+  level?: "info" | "warn" | "error" | "success";
+  event?: string;
+  instanceName?: string;
+  phone?: string;
+  messageId?: string | null;
+  stage: string;
+  summary: string;
+  details?: Record<string, unknown>;
+};
+
+function compactPayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.slice(0, 3).map(compactPayload);
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const lower = key.toLowerCase();
+    if (lower.includes("base64") || lower.includes("thumbnail") || lower.includes("jpeg")) {
+      out[key] = "[omitido]";
+    } else if (typeof raw === "string" && raw.length > 800) {
+      out[key] = `${raw.slice(0, 800)}…`;
+    } else {
+      out[key] = compactPayload(raw);
+    }
+  }
+  return out;
+}
+
+async function logWebhook(entry: WebhookLog) {
+  const payload = {
+    level: entry.level || "info",
+    source: "whatsapp",
+    event: entry.event || null,
+    instance_name: entry.instanceName || null,
+    phone: entry.phone || null,
+    message_id: entry.messageId || null,
+    stage: entry.stage,
+    summary: entry.summary,
+    details: compactPayload(entry.details || {}) as never,
+  };
+  const line = `[WA:${payload.level}] ${entry.stage} ${entry.phone || "-"} ${entry.summary}`;
+  if (payload.level === "error") console.error(line, payload.details);
+  else console.log(line, payload.details);
+  try {
+    await (supabaseAdmin as any).from("webhook_logs").insert(payload);
+  } catch (error) {
+    console.error("Webhook log insert failed", error);
+  }
+}
+
+function normalizeMessageData(raw: unknown): Record<string, any> | null {
+  const data = Array.isArray(raw) ? raw[0] : raw;
+  if (!data || typeof data !== "object") return null;
+  const obj = data as Record<string, any>;
+  if (obj.message && obj.key) return obj;
+  if (Array.isArray(obj.messages) && obj.messages[0]) return obj.messages[0];
+  return obj;
+}
+
+function extractMessage(message: Record<string, any> | undefined): Record<string, any> | undefined {
+  let current = message;
+  for (let i = 0; i < 5; i++) {
+    if (!current) return undefined;
+    if (current.ephemeralMessage?.message) current = current.ephemeralMessage.message;
+    else if (current.viewOnceMessage?.message) current = current.viewOnceMessage.message;
+    else if (current.viewOnceMessageV2?.message) current = current.viewOnceMessageV2.message;
+    else break;
+  }
+  return current;
+}
+
 // Transcribe audio via Lovable AI Gateway (Gemini supports audio input).
 async function transcribeAudio(base64: string, mimetype: string): Promise<string | null> {
   const key = process.env.LOVABLE_API_KEY;
