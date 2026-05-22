@@ -402,7 +402,7 @@ async function checkPending(phone: string, content: string): Promise<string | nu
 }
 
 export async function runAgent(opts: { instanceName: string; phone: string; jid: string; content: string }): Promise<void> {
-  const { instanceName, phone, jid, content } = opts;
+  const { instanceName, phone, content } = opts;
 
   const { data: inst } = await supabaseAdmin
     .from("wa_instances")
