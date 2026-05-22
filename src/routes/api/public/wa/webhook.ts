@@ -90,12 +90,20 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                 content,
                 message_type: "text",
                 timestamp: ts,
-                raw: body as object,
+                raw: body as never,
               });
 
-              const upd: Record<string, unknown> = { last_interaction_at: ts };
-              if (!fromMe) upd.unread_count = (lead.unread_count || 0) + 1;
-              await supabaseAdmin.from("leads").update(upd).eq("id", lead.id);
+              if (!fromMe) {
+                await supabaseAdmin
+                  .from("leads")
+                  .update({ last_interaction_at: ts, unread_count: (lead.unread_count || 0) + 1 })
+                  .eq("id", lead.id);
+              } else {
+                await supabaseAdmin
+                  .from("leads")
+                  .update({ last_interaction_at: ts })
+                  .eq("id", lead.id);
+              }
             }
           }
         } catch (e) {
