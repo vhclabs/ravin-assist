@@ -455,7 +455,7 @@ export async function runAgent(opts: { instanceName: string; phone: string; jid:
       // Destructive → ask confirmation instead of executing
       if (DESTRUCTIVE.has(tc.function.name)) {
         const summary = `${tc.function.name}(${JSON.stringify(args)})`;
-        await supabaseAdmin.from("agent_pending").upsert({ phone, action: { name: tc.function.name, args }, summary });
+        await supabaseAdmin.from("agent_pending").upsert({ phone, action: { name: tc.function.name, args } as never, summary });
         await sendText(instanceName, jid, `⚠️ Vou executar:\n${summary}\n\nResponda *confirmar* para prosseguir ou qualquer outra coisa para cancelar.`);
         return;
       }
