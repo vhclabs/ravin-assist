@@ -56,7 +56,7 @@ export async function createInstance(name: string, webhookUrl: string) {
     webhook: {
       url: webhookUrl,
       byEvents: false,
-      base64: false,
+      base64: true,
       events: WEBHOOK_EVENTS,
     },
   };
@@ -77,7 +77,7 @@ export async function setWebhook(name: string, webhookUrl: string, token?: strin
           enabled: true,
           url: webhookUrl,
           byEvents: false,
-          base64: false,
+          base64: true,
           events: WEBHOOK_EVENTS,
         },
       }),
