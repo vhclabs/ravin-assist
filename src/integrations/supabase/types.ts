@@ -485,6 +485,48 @@ export type Database = {
           },
         ]
       }
+      webhook_logs: {
+        Row: {
+          created_at: string
+          details: Json
+          event: string | null
+          id: string
+          instance_name: string | null
+          level: string
+          message_id: string | null
+          phone: string | null
+          source: string
+          stage: string
+          summary: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          event?: string | null
+          id?: string
+          instance_name?: string | null
+          level?: string
+          message_id?: string | null
+          phone?: string | null
+          source?: string
+          stage: string
+          summary: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          event?: string | null
+          id?: string
+          instance_name?: string | null
+          level?: string
+          message_id?: string | null
+          phone?: string | null
+          source?: string
+          stage?: string
+          summary?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
