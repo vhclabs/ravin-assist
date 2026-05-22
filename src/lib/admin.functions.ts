@@ -10,6 +10,7 @@ import {
   logoutInstance,
   instanceState,
   getWebhookUrl,
+  setWebhook,
 } from "./evolution.server";
 import { getRequestHost } from "@tanstack/react-start/server";
 
