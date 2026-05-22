@@ -1,8 +1,8 @@
 // Helpers for Evolution API (server-only).
-const BASE_URL = (() => {
+function baseUrl() {
   const u = process.env.EVOLUTION_API_URL || "";
   return u.endsWith("/") ? u.slice(0, -1) : u;
-})();
+}
 
 function apiKey() {
   const k = process.env.EVOLUTION_API_KEY;
@@ -11,6 +11,7 @@ function apiKey() {
 }
 
 function url(path: string) {
+  const BASE_URL = baseUrl();
   if (!BASE_URL) throw new Error("EVOLUTION_API_URL não configurada.");
   return `${BASE_URL}${path.startsWith("/") ? path : "/" + path}`;
 }
