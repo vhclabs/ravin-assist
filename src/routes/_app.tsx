@@ -2,18 +2,19 @@ import { createFileRoute, Outlet, useNavigate, Link, useLocation } from "@tansta
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { LogOut, LayoutDashboard, ShoppingCart, Users, Settings } from "lucide-react";
+import { LogOut, ShoppingCart, Users, Settings, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
 });
 
-const NAV = [
+type NavItem = { to: string; label: string; icon: LucideIcon; masterOnly?: boolean };
+const NAV: NavItem[] = [
   { to: "/dashboard", label: "Pedidos", icon: ShoppingCart },
   { to: "/comercial", label: "Comercial", icon: Users },
   { to: "/admin", label: "Admin", icon: Settings, masterOnly: true },
-] as const;
+];
 
 function AppLayout() {
   const { isAuthed, ready, logout, user } = useAuth();
