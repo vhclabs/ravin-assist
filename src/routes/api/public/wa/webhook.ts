@@ -133,6 +133,13 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
 
         const event = String(body.event || "").toUpperCase().replace(/[.-]/g, "_");
         const instanceName = String(body.instance || "");
+        await logWebhook({
+          event,
+          instanceName,
+          stage: "received",
+          summary: `Evento recebido: ${event || "sem_evento"}`,
+          details: { keys: Object.keys(body), payload: body },
+        });
 
         try {
           if (event === "CONNECTION_UPDATE") {
@@ -148,7 +155,7 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
               .update({ status, phone_number: phone ?? undefined })
               .eq("instance_name", instanceName);
           } else if (event === "MESSAGES_UPSERT") {
-            const data = (body.data || {}) as {
+            const data = normalizeMessageData(body.data) as {
               key?: { remoteJid?: string; fromMe?: boolean; id?: string };
               message?: {
                 conversation?: string;
@@ -159,10 +166,16 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
               messageTimestamp?: number;
               pushName?: string;
             };
+            if (!data) {
+              await logWebhook({ level: "warn", event, instanceName, stage: "ignored", summary: "Payload de mensagem vazio ou inválido", details: { data: body.data } });
+              return new Response("ignored", { status: 200 });
+            }
+            const message = extractMessage(data.message as Record<string, any> | undefined);
             const jid = data.key?.remoteJid || "";
             const fromMe = !!data.key?.fromMe;
             if (!jid || jid.endsWith("@g.us")) {
               console.log("WA webhook ignored", { reason: !jid ? "missing_jid" : "group", event, instanceName });
+              await logWebhook({ level: "warn", event, instanceName, stage: "ignored", summary: !jid ? "Mensagem sem JID" : "Mensagem de grupo ignorada", details: { key: data.key } });
               return new Response("ignored", { status: 200 });
             }
             const phone = jid.split("@")[0].replace(/\D/g, "");
@@ -170,15 +183,17 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
 
             let messageType: "text" | "audio" | "image" | "other" = "text";
             let content =
-              data.message?.conversation ||
-              data.message?.extendedTextMessage?.text ||
-              data.message?.imageMessage?.caption ||
+              message?.conversation ||
+              message?.extendedTextMessage?.text ||
+              message?.imageMessage?.caption ||
               "";
+            await logWebhook({ event, instanceName, phone, messageId, stage: "message_parsed", summary: `Mensagem ${fromMe ? "enviada" : "recebida"} detectada`, details: { fromMe, jid, messageKeys: Object.keys(message || {}) } });
 
             // Audio: download + transcribe
-            if (data.message?.audioMessage && messageId) {
+            if (message?.audioMessage && messageId) {
               messageType = "audio";
               try {
+                await logWebhook({ event, instanceName, phone, messageId, stage: "audio_download_start", summary: "Baixando áudio da Evolution API", details: { mimetype: message.audioMessage.mimetype, seconds: message.audioMessage.seconds } });
                 const { data: inst } = await supabaseAdmin
                   .from("wa_instances")
                   .select("api_token")
@@ -186,20 +201,28 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                   .maybeSingle();
                 const media = await getBase64FromMedia(instanceName, messageId, inst?.api_token || undefined);
                 if (media?.base64) {
+                  await logWebhook({ event, instanceName, phone, messageId, stage: "audio_download_ok", summary: "Áudio baixado; iniciando transcrição", details: { mimetype: media.mimetype || message.audioMessage.mimetype, mediaType: media.mediaType, base64Length: media.base64.length } });
                   const transcript = await transcribeAudio(
                     media.base64,
-                    media.mimetype || data.message.audioMessage.mimetype || "audio/ogg"
+                    media.mimetype || message.audioMessage.mimetype || "audio/ogg"
                   );
-                  if (transcript) content = `[áudio] ${transcript}`;
-                  else content = "[áudio recebido — não foi possível transcrever]";
+                  if (transcript) {
+                    content = `[áudio] ${transcript}`;
+                    await logWebhook({ level: "success", event, instanceName, phone, messageId, stage: "audio_transcribed", summary: transcript.slice(0, 220), details: { transcript } });
+                  } else {
+                    content = "[áudio recebido — não foi possível transcrever]";
+                    await logWebhook({ level: "error", event, instanceName, phone, messageId, stage: "audio_transcribe_empty", summary: "Transcrição retornou vazia", details: {} });
+                  }
                 } else {
                   content = "[áudio recebido]";
+                  await logWebhook({ level: "error", event, instanceName, phone, messageId, stage: "audio_download_empty", summary: "Evolution não retornou base64 do áudio", details: { media } });
                 }
               } catch (e) {
                 console.error("Audio download/transcribe error", e);
                 content = "[áudio recebido — erro ao processar]";
+                await logWebhook({ level: "error", event, instanceName, phone, messageId, stage: "audio_error", summary: (e as Error).message || "Erro ao processar áudio", details: { error: String(e) } });
               }
-            } else if (data.message?.imageMessage) {
+            } else if (message?.imageMessage) {
               messageType = "image";
               if (!content) content = "[imagem recebida]";
             } else if (!content) {
