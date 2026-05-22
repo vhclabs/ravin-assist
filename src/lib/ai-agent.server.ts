@@ -404,17 +404,24 @@ async function checkPending(phone: string, content: string): Promise<string | nu
 export async function runAgent(opts: { instanceName: string; phone: string; jid: string; content: string }): Promise<void> {
   const { instanceName, phone, jid, content } = opts;
 
+  const { data: inst } = await supabaseAdmin
+    .from("wa_instances")
+    .select("api_token")
+    .eq("instance_name", instanceName)
+    .maybeSingle();
+  const sendReply = (text: string) => sendText(instanceName, phone, text, inst?.api_token || undefined);
+
   // 1. Pending confirmation?
   const pendingReply = await checkPending(phone, content);
   if (pendingReply !== null) {
-    await sendText(instanceName, jid, pendingReply);
+    await sendReply(pendingReply);
     return;
   }
 
   // 2. Call Lovable AI
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) {
-    await sendText(instanceName, jid, "⚠️ Agente IA indisponível (LOVABLE_API_KEY ausente).");
+    await sendReply("⚠️ Agente IA indisponível (LOVABLE_API_KEY ausente).");
     return;
   }
 
@@ -432,17 +439,17 @@ export async function runAgent(opts: { instanceName: string; phone: string; jid:
     if (!res.ok) {
       const txt = await res.text();
       console.error("AI error", res.status, txt);
-      await sendText(instanceName, jid, `⚠️ IA falhou (${res.status}). Tente novamente.`);
+      await sendReply(`⚠️ IA falhou (${res.status}). Tente novamente.`);
       return;
     }
     const json = (await res.json()) as { choices?: Array<{ message?: { content?: string; tool_calls?: ToolCall[] } }> };
     const msg = json.choices?.[0]?.message;
-    if (!msg) { await sendText(instanceName, jid, "⚠️ IA sem resposta."); return; }
+    if (!msg) { await sendReply("⚠️ IA sem resposta."); return; }
 
     const toolCalls = msg.tool_calls || [];
     if (!toolCalls.length) {
       const text = msg.content?.trim() || "(sem resposta)";
-      await sendText(instanceName, jid, text);
+      await sendReply(text);
       return;
     }
 
@@ -456,7 +463,7 @@ export async function runAgent(opts: { instanceName: string; phone: string; jid:
       if (DESTRUCTIVE.has(tc.function.name)) {
         const summary = `${tc.function.name}(${JSON.stringify(args)})`;
         await supabaseAdmin.from("agent_pending").upsert({ phone, action: { name: tc.function.name, args } as never, summary });
-        await sendText(instanceName, jid, `⚠️ Vou executar:\n${summary}\n\nResponda *confirmar* para prosseguir ou qualquer outra coisa para cancelar.`);
+        await sendReply(`⚠️ Vou executar:\n${summary}\n\nResponda *confirmar* para prosseguir ou qualquer outra coisa para cancelar.`);
         return;
       }
 
@@ -465,7 +472,7 @@ export async function runAgent(opts: { instanceName: string; phone: string; jid:
     }
   }
 
-  await sendText(instanceName, jid, "⚠️ Loop de ferramentas excedido.");
+  await sendReply("⚠️ Loop de ferramentas excedido.");
 }
 
 export async function isAgentMaster(phone: string): Promise<boolean> {
