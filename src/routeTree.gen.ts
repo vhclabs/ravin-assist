@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppComercialRouteImport } from './routes/_app.comercial'
 import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppPedidoNovoRouteImport } from './routes/_app.pedido.novo'
 import { Route as ApiPublicWaWebhookRouteImport } from './routes/api/public/wa/webhook'
@@ -36,6 +37,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppComercialRoute = AppComercialRouteImport.update({
+  id: '/comercial',
+  path: '/comercial',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAdminRoute = AppAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -56,6 +62,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/admin': typeof AppAdminRoute
+  '/comercial': typeof AppComercialRoute
   '/dashboard': typeof AppDashboardRoute
   '/pedido/novo': typeof AppPedidoNovoRoute
   '/api/public/wa/webhook': typeof ApiPublicWaWebhookRoute
@@ -64,6 +71,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/admin': typeof AppAdminRoute
+  '/comercial': typeof AppComercialRoute
   '/dashboard': typeof AppDashboardRoute
   '/pedido/novo': typeof AppPedidoNovoRoute
   '/api/public/wa/webhook': typeof ApiPublicWaWebhookRoute
@@ -74,6 +82,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/_app/admin': typeof AppAdminRoute
+  '/_app/comercial': typeof AppComercialRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/pedido/novo': typeof AppPedidoNovoRoute
   '/api/public/wa/webhook': typeof ApiPublicWaWebhookRoute
@@ -84,6 +93,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/admin'
+    | '/comercial'
     | '/dashboard'
     | '/pedido/novo'
     | '/api/public/wa/webhook'
@@ -92,6 +102,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/admin'
+    | '/comercial'
     | '/dashboard'
     | '/pedido/novo'
     | '/api/public/wa/webhook'
@@ -101,6 +112,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/_app/admin'
+    | '/_app/comercial'
     | '/_app/dashboard'
     | '/_app/pedido/novo'
     | '/api/public/wa/webhook'
@@ -143,6 +155,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/comercial': {
+      id: '/_app/comercial'
+      path: '/comercial'
+      fullPath: '/comercial'
+      preLoaderRoute: typeof AppComercialRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/admin': {
       id: '/_app/admin'
       path: '/admin'
@@ -169,12 +188,14 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRoute
+  AppComercialRoute: typeof AppComercialRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppPedidoNovoRoute: typeof AppPedidoNovoRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAdminRoute: AppAdminRoute,
+  AppComercialRoute: AppComercialRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppPedidoNovoRoute: AppPedidoNovoRoute,
 }
