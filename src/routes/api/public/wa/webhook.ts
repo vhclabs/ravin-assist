@@ -75,6 +75,22 @@ function extractMessage(message: Record<string, any> | undefined): Record<string
   return current;
 }
 
+function findBase64Media(value: unknown): { base64: string; mimetype?: string; source: string } | null {
+  if (!value || typeof value !== "object") return null;
+  const obj = value as Record<string, any>;
+  const candidates = [obj.base64, obj.media, obj.data, obj.file, obj.audio, obj.audioBase64, obj.mediaMessage?.base64];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const match = candidate.match(/^(?:data:([^;]+);base64,)?([A-Za-z0-9+/=\n\r]+)$/);
+    if (match && match[2]?.length > 80) return { base64: match[2].replace(/\s/g, ""), mimetype: match[1] || obj.mimetype, source: "payload" };
+  }
+  for (const raw of Object.values(obj)) {
+    const found = findBase64Media(raw);
+    if (found) return found;
+  }
+  return null;
+}
+
 // Transcribe audio via Lovable AI Gateway (Gemini supports audio input).
 async function transcribeAudio(base64: string, mimetype: string): Promise<string | null> {
   const key = process.env.LOVABLE_API_KEY;
@@ -194,12 +210,13 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
               messageType = "audio";
               try {
                 await logWebhook({ event, instanceName, phone, messageId, stage: "audio_download_start", summary: "Baixando áudio da Evolution API", details: { mimetype: message.audioMessage.mimetype, seconds: message.audioMessage.seconds } });
+                const inlineMedia = findBase64Media(body);
                 const { data: inst } = await supabaseAdmin
                   .from("wa_instances")
                   .select("api_token")
                   .eq("instance_name", instanceName)
                   .maybeSingle();
-                const media = await getBase64FromMedia(instanceName, messageId, inst?.api_token || undefined);
+                const media = inlineMedia || await getBase64FromMedia(instanceName, messageId, inst?.api_token || undefined);
                 if (media?.base64) {
                   await logWebhook({ event, instanceName, phone, messageId, stage: "audio_download_ok", summary: "Áudio baixado; iniciando transcrição", details: { mimetype: media.mimetype || message.audioMessage.mimetype, mediaType: media.mediaType, base64Length: media.base64.length } });
                   const transcript = await transcribeAudio(
