@@ -29,9 +29,10 @@ import {
   refreshQrCode,
   removeWaInstance,
   resetWaWebhook,
+  listWebhookLogs,
 } from "@/lib/admin.functions";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil, RefreshCw, Smartphone, QrCode, Loader2 } from "lucide-react";
+import { Plus, Trash2, Pencil, RefreshCw, Smartphone, QrCode, Loader2, Radio } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admin")({
   head: () => ({ meta: [{ title: "RAVIN · Admin" }] }),
@@ -63,12 +64,14 @@ function AdminPage() {
         <TabsList className="bg-card/50 border border-accent/10">
           <TabsTrigger value="produtos">Estoque</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="logs">Logs ao vivo</TabsTrigger>
           <TabsTrigger value="emails">E-mails</TabsTrigger>
           <TabsTrigger value="usuarios">Usuários</TabsTrigger>
         </TabsList>
 
         <TabsContent value="produtos"><ProductsTab /></TabsContent>
         <TabsContent value="whatsapp"><WhatsAppTab /></TabsContent>
+        <TabsContent value="logs"><WebhookLogsTab /></TabsContent>
         <TabsContent value="emails"><EmailsTab /></TabsContent>
         <TabsContent value="usuarios"><UsersTab /></TabsContent>
       </Tabs>
