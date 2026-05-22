@@ -289,6 +289,13 @@ function WhatsAppTab() {
     catch (e) { toast.error((e as Error).message); }
   };
 
+  const resetHook = async (name: string) => {
+    try {
+      const r = await resetWaWebhook({ data: { name } });
+      toast.success(`Webhook atualizado: ${r.webhook}`);
+    } catch (e) { toast.error((e as Error).message); }
+  };
+
   const openQr = (name: string) => setQr({ name, image: null });
 
   return (
