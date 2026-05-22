@@ -304,3 +304,15 @@ export const resetWaWebhook = createServerFn({ method: "POST" })
     await setWebhook(data.name, webhook, token);
     return { ok: true, webhook };
   });
+
+export const listWebhookLogs = createServerFn({ method: "GET" })
+  .middleware([requireMaster])
+  .handler(async () => {
+    const { data, error } = await (supabaseAdmin as any)
+      .from("webhook_logs")
+      .select("id,created_at,level,source,event,instance_name,phone,message_id,stage,summary,details")
+      .order("created_at", { ascending: false })
+      .limit(120);
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
