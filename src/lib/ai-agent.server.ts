@@ -314,7 +314,7 @@ async function execTool(name: string, args: Record<string, unknown>): Promise<st
       const { data: l } = await supabaseAdmin.from("leads").select("id").or(`name.ilike.%${args.query}%,company.ilike.%${args.query}%`).limit(1).maybeSingle();
       if (!l) return "Lead não encontrado.";
       const patch = (args.patch || {}) as Record<string, unknown>;
-      const { error } = await supabaseAdmin.from("leads").update(patch).eq("id", l.id);
+      const { error } = await supabaseAdmin.from("leads").update(patch as never).eq("id", l.id);
       if (error) return `Erro: ${error.message}`;
       return "Lead atualizado.";
     }
