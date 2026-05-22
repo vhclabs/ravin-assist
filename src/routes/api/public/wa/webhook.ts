@@ -218,7 +218,7 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                   .maybeSingle();
                 const media = inlineMedia || await getBase64FromMedia(instanceName, messageId, inst?.api_token || undefined);
                 if (media?.base64) {
-                  await logWebhook({ event, instanceName, phone, messageId, stage: "audio_download_ok", summary: "Áudio baixado; iniciando transcrição", details: { mimetype: media.mimetype || message.audioMessage.mimetype, mediaType: media.mediaType, base64Length: media.base64.length } });
+                  await logWebhook({ event, instanceName, phone, messageId, stage: "audio_download_ok", summary: "Áudio disponível; iniciando transcrição", details: { mimetype: media.mimetype || message.audioMessage.mimetype, source: "source" in media ? media.source : "evolution_download", mediaType: "mediaType" in media ? media.mediaType : undefined, base64Length: media.base64.length } });
                   const transcript = await transcribeAudio(
                     media.base64,
                     media.mimetype || message.audioMessage.mimetype || "audio/ogg"
