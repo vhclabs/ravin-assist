@@ -369,6 +369,108 @@ function WhatsAppTab() {
   );
 }
 
+/* ============================== LIVE LOGS ============================== */
+type WebhookLogRow = {
+  id: string;
+  created_at: string;
+  level: "info" | "warn" | "error" | "success";
+  event: string | null;
+  instance_name: string | null;
+  phone: string | null;
+  message_id: string | null;
+  stage: string;
+  summary: string;
+  details: Record<string, unknown>;
+};
+
+function WebhookLogsTab() {
+  const [logs, setLogs] = useState<WebhookLogRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [auto, setAuto] = useState(true);
+  const [open, setOpen] = useState<string | null>(null);
+
+  const refresh = async (quiet = false) => {
+    if (!quiet) setLoading(true);
+    try {
+      setLogs((await listWebhookLogs()) as WebhookLogRow[]);
+    } catch (e) {
+      if (!quiet) toast.error((e as Error).message);
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  useEffect(() => {
+    if (!auto) return;
+    const id = window.setInterval(() => refresh(true), 2500);
+    return () => window.clearInterval(id);
+  }, [auto]);
+
+  const tone = (level: WebhookLogRow["level"]) => {
+    if (level === "error") return "border-destructive/30 bg-destructive/10 text-destructive";
+    if (level === "warn") return "border-accent/30 bg-accent/10 text-accent";
+    if (level === "success") return "border-primary/30 bg-primary/10 text-primary";
+    return "border-border bg-muted/20 text-muted-foreground";
+  };
+
+  return (
+    <Card className="glass border-accent/10 p-6 animate-fade-up">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+        <div>
+          <h3 className="font-serif text-xl flex items-center gap-2">
+            <Radio className="h-5 w-5 text-accent" /> Logs do WhatsApp
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">Atualiza sozinho a cada 2,5s. Aqui aparece webhook, áudio, lead e Jarvis.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setAuto(!auto)} className="border-accent/30">
+            {auto ? "Pausar ao vivo" : "Retomar ao vivo"}
+          </Button>
+          <Button onClick={() => refresh()} className="bg-gradient-wine border border-accent/40">
+            <RefreshCw className="h-4 w-4 mr-2" /> Atualizar
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-10 text-muted-foreground">Carregando logs…</div>
+      ) : logs.length === 0 ? (
+        <div className="text-center py-10 text-muted-foreground">Nenhum log ainda. Envie uma mensagem ou áudio para a instância.</div>
+      ) : (
+        <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
+          {logs.map((log) => (
+            <div key={log.id} className="rounded-lg border border-accent/10 bg-card/40 overflow-hidden">
+              <button type="button" onClick={() => setOpen(open === log.id ? null : log.id)} className="w-full text-left p-3 hover:bg-accent/5 transition-colors">
+                <div className="flex flex-col md:flex-row md:items-center gap-2">
+                  <Badge variant="outline" className={tone(log.level)}>{log.level}</Badge>
+                  <span className="text-xs text-muted-foreground shrink-0">{new Date(log.created_at).toLocaleTimeString("pt-BR")}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{log.phone || "sem telefone"}</span>
+                  <span className="text-xs font-mono text-accent shrink-0">{log.stage}</span>
+                  <span className="text-sm flex-1 break-words">{log.summary}</span>
+                </div>
+              </button>
+              {open === log.id && (
+                <div className="border-t border-accent/10 p-3 bg-background/30">
+                  <div className="grid sm:grid-cols-3 gap-2 text-xs text-muted-foreground mb-3">
+                    <div>Evento: {log.event || "—"}</div>
+                    <div>Instância: {log.instance_name || "—"}</div>
+                    <div>Mensagem: {log.message_id || "—"}</div>
+                  </div>
+                  <pre className="text-xs whitespace-pre-wrap break-words rounded-md border border-accent/10 bg-card/60 p-3 max-h-72 overflow-auto">
+                    {JSON.stringify(log.details || {}, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ============================== EMAILS ============================== */
 type Recipient = { id: string; name: string; email: string; tags: string[] };
 type Template = { id: string; name: string; subject: string; body: string };
