@@ -256,10 +256,13 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                 .single();
               if (leadError) console.error("Lead create error", leadError);
               lead = newLead;
+              await logWebhook({ level: leadError ? "error" : "success", event, instanceName, phone, messageId, stage: "lead_created", summary: leadError ? `Erro ao criar lead: ${leadError.message}` : `Lead criado: ${newLead?.name || phone}`, details: { leadError, leadId: newLead?.id } });
+            } else if (lead) {
+              await logWebhook({ event, instanceName, phone, messageId, stage: "lead_found", summary: `Lead encontrado: ${lead.name || phone}`, details: { leadId: lead.id, unread: lead.unread_count } });
             }
 
             if (lead) {
-              await supabaseAdmin.from("wa_messages").insert({
+              const { error: msgError } = await supabaseAdmin.from("wa_messages").insert({
                 instance_name: instanceName,
                 lead_id: lead.id,
                 remote_jid: jid,
@@ -270,6 +273,7 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                 timestamp: ts,
                 raw: body as never,
               });
+              await logWebhook({ level: msgError ? "error" : "success", event, instanceName, phone, messageId, stage: "message_saved", summary: msgError ? `Erro ao salvar mensagem: ${msgError.message}` : `Mensagem salva (${messageType})`, details: { msgError, content } });
 
               if (!fromMe) {
                 await supabaseAdmin
@@ -287,17 +291,25 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
               // For all other senders we just record the lead/message (handled above).
               if (!fromMe && (await isAgentMaster(phone))) {
                 try {
+                  await logWebhook({ event, instanceName, phone, messageId, stage: "agent_start", summary: "Mensagem é do Denis; acionando Jarvis", details: { content } });
                   // Strip "[áudio] " prefix when passing to agent so it acts naturally.
                   const agentContent = content.startsWith("[áudio] ") ? content.slice(8) : content;
                   await runAgent({ instanceName, phone, jid, content: agentContent });
+                  await logWebhook({ level: "success", event, instanceName, phone, messageId, stage: "agent_done", summary: "Jarvis executou e tentou responder", details: { agentContent } });
                 } catch (e) {
                   console.error("Agent error:", e);
+                  await logWebhook({ level: "error", event, instanceName, phone, messageId, stage: "agent_error", summary: (e as Error).message || "Erro no Jarvis", details: { error: String(e) } });
                 }
+              } else if (!fromMe) {
+                await logWebhook({ event, instanceName, phone, messageId, stage: "agent_skipped", summary: "Não é o número master; só registrei como lead/mensagem", details: {} });
               }
+            } else {
+              await logWebhook({ level: "warn", event, instanceName, phone, messageId, stage: "no_lead", summary: "Mensagem não foi associada a lead", details: { fromMe } });
             }
           }
         } catch (e) {
           console.error("Webhook error:", e);
+          await logWebhook({ level: "error", event, instanceName, stage: "fatal_error", summary: (e as Error).message || "Erro geral no webhook", details: { error: String(e) } });
         }
 
         return new Response("ok", { status: 200 });
