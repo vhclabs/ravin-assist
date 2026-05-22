@@ -60,7 +60,7 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
           return new Response("Bad JSON", { status: 400 });
         }
 
-        const event = String(body.event || "").toUpperCase();
+        const event = String(body.event || "").toUpperCase().replace(/[.-]/g, "_");
         const instanceName = String(body.instance || "");
 
         try {
@@ -91,6 +91,7 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
             const jid = data.key?.remoteJid || "";
             const fromMe = !!data.key?.fromMe;
             if (!jid || jid.endsWith("@g.us")) {
+              console.log("WA webhook ignored", { reason: !jid ? "missing_jid" : "group", event, instanceName });
               return new Response("ignored", { status: 200 });
             }
             const phone = jid.split("@")[0].replace(/\D/g, "");
@@ -147,7 +148,7 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
               .maybeSingle();
 
             if (!lead && !fromMe) {
-              const { data: newLead } = await supabaseAdmin
+              const { data: newLead, error: leadError } = await supabaseAdmin
                 .from("leads")
                 .insert({
                   phone,
@@ -159,6 +160,7 @@ export const Route = createFileRoute("/api/public/wa/webhook")({
                 })
                 .select("id,unread_count,name")
                 .single();
+              if (leadError) console.error("Lead create error", leadError);
               lead = newLead;
             }
 
