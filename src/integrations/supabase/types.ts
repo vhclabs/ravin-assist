@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_pending: {
+        Row: {
+          action: Json
+          created_at: string
+          phone: string
+          summary: string
+        }
+        Insert: {
+          action: Json
+          created_at?: string
+          phone: string
+          summary: string
+        }
+        Update: {
+          action?: Json
+          created_at?: string
+          phone?: string
+          summary?: string
+        }
+        Relationships: []
+      }
       app_users: {
         Row: {
           active: boolean
@@ -92,6 +113,24 @@ export type Database = {
           name?: string
           subject?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      kv_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value?: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: Json
         }
         Relationships: []
       }
